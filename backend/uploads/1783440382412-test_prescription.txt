@@ -1,0 +1,4 @@
+Patient: John Doe
+Prescribed: Amoxicillin 500mg twice daily
+Doctor: Dr. Smith
+------WebKitFormBoundary123--
