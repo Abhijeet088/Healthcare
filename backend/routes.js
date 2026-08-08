@@ -19,21 +19,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'Your Health Will Partner_secret_to
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure multer uploads directory
-const uploadDir = path.resolve(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  }
-});
-const upload = multer({ storage });
+// Use memory storage — Vercel's filesystem is read-only, cannot use disk storage
+const upload = multer({ storage: multer.memoryStorage() });
 
 // JWT authentication middleware
 export function authenticateToken(req, res, next) {
@@ -289,16 +276,18 @@ async function handleDocumentUpload(req, res) {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
 
   const { docType } = req.body;
-  const filePath = `/uploads/${req.file.filename}`;
+  // Use a unique filename; actual file is in memory (req.file.buffer) on Vercel
+  const filename = `${Date.now()}-${req.file.originalname}`;
+  const filePath = `/uploads/${filename}`;
 
   try {
-    // Run OCR using Tesseract.js (or fallback to mock keywords search if it fails)
+    // Run OCR using Tesseract.js from buffer (memory storage compatible)
     let ocrText = '';
     try {
-      const { data } = await createOCRWorker.recognize(req.file.path, 'eng');
+      const { data } = await createOCRWorker.recognize(req.file.buffer, 'eng');
       ocrText = data.text;
     } catch (ocrErr) {
-      console.warn('Tesseract OCR failed, using fallback regex text:', ocrErr.message);
+      console.warn('Tesseract OCR failed, using fallback mock text:', ocrErr.message);
       // Fallback OCR Mock generator based on file name or generic text
       ocrText = `HEALTH RECORDS FALLBACK MOCK\nDocument Type: ${docType || 'Prescription'}\nDate: ${new Date().toLocaleDateString()}\nPatient: Patient ID ${req.user.id}\nPrescribed: Amoxicillin 500mg, Lisinopril 10mg once daily.\nNo known interactions. Refills: 3.`;
     }
