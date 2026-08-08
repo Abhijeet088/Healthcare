@@ -1,14 +1,15 @@
-import sqlite3 from 'sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { createClient } from '@libsql/client';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// LibSQL / Turso client — uses remote DB in production, /tmp on Vercel serverless, local file in dev
+const dbUrl = process.env.TURSO_DATABASE_URL ||
+  (process.env.VERCEL ? 'file:/tmp/local.db' : 'file:local.db');
 
-const dbPath = path.resolve(__dirname, 'Your Health Will Partner.db');
-const db = new sqlite3.Database(dbPath);
+const db = createClient({
+  url: dbUrl,
+  authToken: process.env.TURSO_AUTH_TOKEN || undefined,
+});
 
 // Encryption details
 const ALGORITHM = 'aes-256-gcm';
@@ -45,31 +46,31 @@ export function decrypt(encryptedText) {
   }
 }
 
-// Promise wrappers
-export const dbRun = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.run(query, params, function(err) {
-      if (err) reject(err);
-      else resolve({ lastID: this.lastID, changes: this.changes });
-    });
-  });
+// Promise wrappers matching the old sqlite3 API surface
+export const dbRun = async (query, params = []) => {
+  const safeParams = params.map(x => x === undefined ? null : x);
+  const result = await db.execute({ sql: query, args: safeParams });
+  return { lastID: Number(result.lastInsertRowid), changes: result.rowsAffected };
 };
 
-export const dbGet = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.get(query, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
+export const dbGet = async (query, params = []) => {
+  const safeParams = params.map(x => x === undefined ? null : x);
+  const result = await db.execute({ sql: query, args: safeParams });
+  if (result.rows.length === 0) return undefined;
+  // Convert LibSQL Row to plain object
+  const row = result.rows[0];
+  const obj = {};
+  result.columns.forEach((col, i) => { obj[col] = row[i]; });
+  return obj;
 };
 
-export const dbAll = (query, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
+export const dbAll = async (query, params = []) => {
+  const safeParams = params.map(x => x === undefined ? null : x);
+  const result = await db.execute({ sql: query, args: safeParams });
+  return result.rows.map(row => {
+    const obj = {};
+    result.columns.forEach((col, i) => { obj[col] = row[i]; });
+    return obj;
   });
 };
 
@@ -203,7 +204,7 @@ export const initDb = async () => {
       reading_value REAL,
       threshold_rule TEXT,
       countdown_started_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      status TEXT NOT NULL, -- 'triggered', 'user_confirmed', 'user_dismissed', 'contact_notified', 'resolved'
+      status TEXT NOT NULL,
       resolved_at TEXT,
       notes TEXT,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -212,10 +213,9 @@ export const initDb = async () => {
   `);
 
   // Seed demo user if empty
-  // Check for existing demo users (either old or new email)
   const demoUser = await dbGet(
     `SELECT * FROM users WHERE email IN (?, ?)`,
-    ['demo@healthguard.com', 'demo@Your Health Will Partner.com']
+    ['demo@healthguard.com', 'demo@yourhealthwillpartner.com']
   );
   if (!demoUser) {
     const hash = await bcrypt.hash('password123', 10);
