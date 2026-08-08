@@ -23,7 +23,8 @@ export default function CaregiverPortal({
   useEffect(() => {
     const fetchActiveAlerts = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/alerts/active');
+        const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+        const res = await fetch(`${apiBase}/alerts/active`);
         if (res.ok) {
           const data = await res.json();
           setActiveAlerts(data);
@@ -343,7 +344,7 @@ export default function CaregiverPortal({
                       <p className="text-[9px] text-slate-500">{new Date(d.uploaded_at).toLocaleDateString()}</p>
                     </div>
                     <a 
-                      href={`http://localhost:5000${d.file_path}`} target="_blank" rel="noreferrer"
+                      href={`${import.meta.env.VITE_API_BASE_URL?.replace('/api','') || 'http://localhost:5000'}${d.file_path}`} target="_blank" rel="noreferrer"
                       className="text-[9px] font-bold text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 px-2 py-0.5 rounded hover:bg-cyan-400 hover:text-slate-950 transition-colors"
                     >
                       View Link
