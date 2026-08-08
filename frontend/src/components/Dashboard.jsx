@@ -255,7 +255,8 @@ export default function Dashboard({
           <button
             onClick={() => {
               const userId = localStorage.getItem('hg_user_id') || 1;
-              window.location.href = `http://localhost:5000/api/fit/auth?userId=${userId}`;
+              const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+              window.location.href = `${apiBase}/fit/auth?userId=${userId}`;
             }}
             style={{
               background: 'linear-gradient(135deg, #22c55e, #15803d)',
